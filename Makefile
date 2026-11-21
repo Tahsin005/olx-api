@@ -1,7 +1,13 @@
 .PHONY: build run
 
 build:
-	@go build -o bin/api cmd/api/main.go
+	@go build -o bin/api ./cmmd/api
 
 run: build
 	@./bin/api
+
+migrate-up:
+	@go run ./cmd/migrate up
+
+migrate-down:
+	@go run ./cmd/migrate down
