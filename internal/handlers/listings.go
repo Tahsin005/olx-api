@@ -3,7 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -36,7 +36,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 		limit 100`,
 	)
 	if err != nil {
-		log.Printf("query: %v", err)
+		slog.Error("query failed", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -47,7 +47,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var l listing
 		if err := rows.Scan(&l.ID, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
-			log.Printf("rows.scan: %v", err)
+			slog.Error("rows scan failed", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -56,7 +56,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("rows.err: %v", err)
+		slog.Error("rows iteration failed", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -77,7 +77,7 @@ func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		log.Printf("delete: %v", err)
+		slog.Error("delete failed", "listing_id", id, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
