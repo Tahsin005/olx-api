@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/Tahsin005/olx-api/internal/middlewares"
 )
 
 type listing struct {
@@ -19,14 +21,19 @@ type listing struct {
 
 type ListingHandler struct {
 	db *sql.DB
+	logger *slog.Logger
 }
 
-func NewListingHandler(db *sql.DB) *ListingHandler {
-	return &ListingHandler{db: db}
+func NewListingHandler(db *sql.DB, logger *slog.Logger) *ListingHandler {
+	return &ListingHandler{
+		db: db, 
+		logger: logger,
+	}
 }
 
 func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestId := middlewares.RequestIDFromContext(ctx)
 
 	rows, err := lh.db.QueryContext(
 		ctx,
@@ -36,7 +43,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 		limit 100`,
 	)
 	if err != nil {
-		slog.Error("query failed", "err", err)
+		lh.logger.Error("listing query error", "request_id", requestId, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -47,7 +54,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var l listing
 		if err := rows.Scan(&l.ID, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
-			slog.Error("rows scan failed", "err", err)
+			lh.logger.Error("rows scan error", "request_id", requestId, "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -56,7 +63,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		slog.Error("rows iteration failed", "err", err)
+		lh.logger.Error("rows iteration failed", "request_id", requestId, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -69,6 +76,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestId := middlewares.RequestIDFromContext(ctx)
 	id := r.PathValue("id")
 
 	_, err := lh.db.ExecContext(
@@ -77,7 +85,7 @@ func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		slog.Error("delete failed", "listing_id", id, "err", err)
+		lh.logger.Error("delete failed", "listing_id", id, "request_id", requestId, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
