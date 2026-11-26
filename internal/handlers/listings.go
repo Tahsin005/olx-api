@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Tahsin005/olx-api/internal/httpx"
 	"github.com/Tahsin005/olx-api/internal/middlewares"
 )
 
@@ -44,7 +45,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		lh.logger.Error("listing query error", "request_id", requestId, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 	defer rows.Close()
@@ -55,7 +56,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 		var l listing
 		if err := rows.Scan(&l.ID, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
 			lh.logger.Error("rows scan error", "request_id", requestId, "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 			return
 		}
 
@@ -64,7 +65,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	if err := rows.Err(); err != nil {
 		lh.logger.Error("rows iteration failed", "request_id", requestId, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 
@@ -86,7 +87,7 @@ func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		lh.logger.Error("delete failed", "listing_id", id, "request_id", requestId, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 
