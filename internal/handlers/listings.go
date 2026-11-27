@@ -98,7 +98,7 @@ func (lh *ListingHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestId := middlewares.RequestIDFromContext(ctx)
 
-	var req listing
+	var req CreateListingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		lh.logger.Error("failed to decode request body", "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusBadRequest, "invalid body", httpx.CodeMalformedJSON)
@@ -106,21 +106,21 @@ func (lh *ListingHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	row := lh.db.QueryRowContext(ctx, 
-		`insert into listings (title, description, price, city) values ($1, $2, $3, $4) returning id`,
+		`insert into listings (title, description, price, city) values ($1, $2, $3, $4) returning id, created_at`,
 		req.Title, req.Description, req.Price, req.City,
 	)
 	
-	var id string
-	if err := row.Scan(&id); err != nil {
+	var out CreateListingResponse
+	if err := row.Scan(&out.ID, &out.CreatedAt); err != nil {
 		lh.logger.Error("failed to insert listing", "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusInternalServerError, "something went wrong", httpx.CodeInternalError)
 		return
 	}
 
-	lh.logger.Info("listing created", "request_id", requestId, "listing_id", id)
+	lh.logger.Info("listing created", "request_id", requestId, "listing_id", out.ID, "created_at", out.CreatedAt)
 	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
+	_ = json.NewEncoder(w).Encode(out)
 }
