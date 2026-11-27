@@ -1,24 +1,25 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/Tahsin005/olx-api/internal/domain"
 	"github.com/Tahsin005/olx-api/internal/httpx"
 	"github.com/Tahsin005/olx-api/internal/middlewares"
+	"github.com/Tahsin005/olx-api/internal/service"
 )
 
 type ListingHandler struct {
-	db *sql.DB
+	svc    *service.ListingService
 	logger *slog.Logger
 }
 
-func NewListingHandler(db *sql.DB, logger *slog.Logger) *ListingHandler {
+func NewListingHandler(svc *service.ListingService, logger *slog.Logger) *ListingHandler {
 	return &ListingHandler{
-		db: db, 
+		svc:    svc,
 		logger: logger,
 	}
 }
@@ -27,43 +28,29 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestId := middlewares.RequestIDFromContext(ctx)
 
-	rows, err := lh.db.QueryContext(
-		ctx,
-		`select id, title, description, price, city, created_at 
-		from listings
-		order by created_at desc 
-		limit 100`,
-	)
+	listings, err := lh.svc.List(ctx)
 	if err != nil {
-		lh.logger.Error("failed to query listings", "request_id", requestId, "err", err)
+		lh.logger.Error("failed to list listings", "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusInternalServerError, "something went wrong", httpx.CodeInternalError)
 		return
 	}
-	defer rows.Close()
 
-	listings := []ListListingsResponse{}
-
-	for rows.Next() {
-		var l ListListingsResponse
-		if err := rows.Scan(&l.ID, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
-			lh.logger.Error("failed to scan listing row", "request_id", requestId, "err", err)
-			httpx.Error(w, http.StatusInternalServerError, "something went wrong", httpx.CodeInternalError)
-			return
+	out := make([]ListListingsResponse, len(listings))
+	for i, l := range listings {
+		out[i] = ListListingsResponse{
+			ID:          l.ID,
+			Title:       l.Title,
+			Description: l.Description,
+			Price:       l.Price,
+			City:        l.City,
+			CreatedAt:   l.CreatedAt,
 		}
-
-		listings = append(listings, l)
-	}
-
-	if err := rows.Err(); err != nil {
-		lh.logger.Error("failed to iterate listing rows", "request_id", requestId, "err", err)
-		httpx.Error(w, http.StatusInternalServerError, "something went wrong", httpx.CodeInternalError)
-		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	_ = json.NewEncoder(w).Encode(listings)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -71,24 +58,16 @@ func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	requestId := middlewares.RequestIDFromContext(ctx)
 	id := r.PathValue("id")
 
-	result, err := lh.db.ExecContext(
-		ctx,
-		`delete from listings where id = $1`, id,
-	)
+	if err := lh.svc.Delete(ctx, id); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			httpx.Error(w, http.StatusNotFound, "listing not found", httpx.CodeNotFound)
+			return
+		}
 
-	if err != nil {
 		lh.logger.Error("failed to delete listing", "listing_id", id, "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusInternalServerError, "something went wrong", httpx.CodeInternalError)
 		return
 	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		httpx.Error(w, http.StatusNotFound, "listing not found", httpx.CodeNotFound)
-		return
-	}
-
-	lh.logger.Info("listing deleted", "request_id", requestId, "listing_id", id)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -112,19 +91,22 @@ func (lh *ListingHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row := lh.db.QueryRowContext(ctx,
-		`insert into listings (title, description, price, city) values ($1, $2, $3, $4) returning id, created_at`,
-		req.Title, req.Description, req.Price, req.City,
-	)
-
-	var out CreateListingResponse
-	if err := row.Scan(&out.ID, &out.CreatedAt); err != nil {
-		lh.logger.Error("failed to insert listing", "request_id", requestId, "err", err)
+	listing, err := lh.svc.Create(ctx, domain.Listing{
+		Title:       req.Title,
+		Description: req.Description,
+		Price:       req.Price,
+		City:        req.City,
+	})
+	if err != nil {
+		lh.logger.Error("failed to create listing", "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusInternalServerError, "something went wrong", httpx.CodeInternalError)
 		return
 	}
 
-	lh.logger.Info("listing created", "request_id", requestId, "listing_id", out.ID, "created_at", out.CreatedAt)
+	out := CreateListingResponse{
+		ID:        listing.ID,
+		CreatedAt: listing.CreatedAt,
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

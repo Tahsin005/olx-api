@@ -12,6 +12,8 @@ import (
 	"github.com/Tahsin005/olx-api/internal/db"
 	"github.com/Tahsin005/olx-api/internal/handlers"
 	"github.com/Tahsin005/olx-api/internal/middlewares"
+	"github.com/Tahsin005/olx-api/internal/repository"
+	"github.com/Tahsin005/olx-api/internal/service"
 )
 
 func main() {
@@ -31,7 +33,10 @@ func main() {
 	fmt.Println("database connected")
 	fmt.Println("starting olx server [" + cfg.Env + "]")
 
-	lh := handlers.NewListingHandler(db, logger)
+	repo := repository.NewListingRepository(db)
+	svc := service.NewListingService(repo, logger)
+	lh := handlers.NewListingHandler(svc, logger)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", handlers.Health)
@@ -41,11 +46,11 @@ func main() {
 
 	handler := middlewares.RequestID(mux)
 	srv := http.Server{
-		Addr: ":" + cfg.Port,
-		Handler: handler,
-		ReadTimeout: time.Second  * 10,
+		Addr:         ":" + cfg.Port,
+		Handler:      handler,
+		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 30,
-		IdleTimeout: time.Second * 60,
+		IdleTimeout:  time.Second * 60,
 	}
 
 	log.Printf("server is listening on %s", srv.Addr)
